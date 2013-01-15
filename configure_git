@@ -1,0 +1,122 @@
+#!/usr/bin/env python
+
+import re
+import os.path
+import os
+import getpass
+import shutil
+
+#thanks to noah spurrier for the which function
+def which(filename):
+
+    """This takes a given filename; tries to find it in the environment path;
+    then checks if it is executable. This returns the full path to the filename
+    if found and executable. Otherwise this returns None."""
+
+    # Special case where filename already contains a path.
+    if os.path.dirname(filename) != '':
+        if os.access(filename, os.X_OK):
+            return filename
+    if not 'PATH' in os.environ or os.environ['PATH'] == '':
+        p = os.defpath
+    else:
+        p = os.environ['PATH']
+    pathlist = p.split(os.pathsep)
+    for path in pathlist:
+        f = os.path.join(path, filename)
+        if os.access(f, os.X_OK):
+            return f
+    return None
+
+# directory where repository metadata is stored
+source_control_directory = '.git'
+source_control_config = '.gitconfig'
+file_dir = os.path.dirname(os.path.realpath(__file__))
+
+def setup_config():
+    print 'Configuring your git settings...'
+    #global settings
+    os.system('git config --global color.diff auto')
+    os.system('git config --global color.status auto')
+    os.system('git config --global color.branch auto')
+    os.system('git config --global color.interactive auto')
+    os.system('git config --global core.editor vi')
+    os.system('git config --global merge.ff false')
+    os.system('git config --global alias.hist "log --pretty=format:\'%h %ad | %s%d [%an]\' --graph --date=short"')
+    os.system('git config --global alias.lg "log --color --graph --pretty=format:\'%Cred%h%Creset -%C(yellow)%d%Creset %s %Cgreen(%cr) %C(bold blue)<%an>%Creset\' --abbrev-commit"')
+    os.system('git config --global core.autocrlf input')
+    os.system('git config --global core.safecrlf true')
+
+    home = os.getenv("HOME")
+    print 'Cool, here is what your config looks like now:'
+    f = open(os.path.join(home, source_control_config), "r")
+    git_config_file = f.read()
+    print git_config_file
+    f.close()
+
+#get the top level of the repository
+def get_repo_path(repo = ''):
+    current_repo = find_repo_path(file_dir)
+    use_current_repo = raw_input("Would you like to configure the current repository (" + current_repo + ")\n\
+with some special git settings? (y/n): ")
+    
+    while repo == '':
+
+        if (use_current_repo == 'y') : 
+            repo = current_repo
+
+        elif (use_current_repo == 'n') :
+            other_repo = raw_input("Specify the path of another repository you\'d like to configure: ")
+            repo = confirm_repo_path(other_repo)
+                 
+        else :
+            use_current_repo = raw_input("Hmm, I can\'t seem to understand what you want.\n\
+Configure git here: " + current_repo + "? (y/n): ")
+
+    return repo
+
+def confirm_repo_path(path):
+    if os.path.isdir(os.path.join(path, source_control_directory)) :
+        return path
+    else :
+        print 'Sorry, doesnt look like that directory is a git repository.'
+        return ''  
+
+# move commit-msg hook into place in the new repository
+def install_hooks(path):
+    print 'Moving hooks into place...'
+    hook_path = os.path.join(file_dir, 'hooks')
+    hooks = os.listdir(hook_path)
+    for hook in hooks:
+        dest = os.path.join(path, source_control_directory, 'hooks', hook)
+        if os.path.isfile(dest):
+            os.remove(dest)
+        elif os.path.islink(dest):
+            os.unlink(dest) 
+        os.symlink(os.path.join(hook_path, hook), dest)
+
+# Recursively scans up the current directory structure to look for a 
+# .git directory
+def find_repo_path(path='/'):
+    if os.path.isdir(os.path.join(path, source_control_directory)) :
+        return path
+    else :
+        if path == '' :
+            return None
+        up_one = re.search('/\w+$', path)
+        return find_repo_path(path[:up_one.start()])
+
+
+def main():
+    if which('git') :
+        repo_path = get_repo_path()
+        install_hooks(repo_path)
+        setup_config()
+    else :
+        print "Sorry, it appears you dont actually have git installed. Do sudo\
+apt-get install git-core and try again."
+    print 'All done!'
+
+if __name__ == "__main__":
+    main()
+
